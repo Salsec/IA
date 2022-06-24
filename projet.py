@@ -4,7 +4,8 @@ import pandas as pd
 import numpy as np
 import pandas_profiling
 from streamlit_pandas_profiling import st_profile_report
-
+from sklearn.model_selection import train_test_split
+from fpgrowth_py import fpgrowth
 
 
 st.title('SYSTEME DE RECOMMANDATION')
@@ -187,3 +188,44 @@ with st.expander('Reorganisation et normalisation du dataset'):
 with st.expander("Rapport de donnée du dataset après reorganisation"):
     profil=pandas_profiling.ProfileReport(panier, title="Rapport de dataset après reorganisation")
     st_profile_report(profil)
+
+st.title('Répartition du dataset')
+#Division du dataset réorganisé en dataset d'entraînement , dataset de test et dataset de validation
+with st.expander("Critère de répartition"):
+    """Train_set : Celui-ci va être le plus volumineux en termes de donnée. En effet, 
+    c’est sur ce jeu ci que le réseau va itérer durant la phase d’entrainement pour pouvoir s’approprier des paramètres, 
+    et les ajuster au mieux. Certaines règles préconisent qu’il soit composé de 80% des données disponibles. 
+    C’est la phase d’apprentissage.
+    Validation_set : Quant à lui, on préconise d’avoir environ 10% des données disponible. 
+    Ce jeu sera appelé une seule fois, à la fin de chaque itération d’entrainement. 
+    Il va permettre d’équilibrer le système. C’est la phase d’ajustage.
+    Test_set : Ce dernier va avoir un rôle bien différent des autres, 
+    puisqu’il ne servira pas à ajuster notre réseau. En effet, 
+    il va avoir pour rôle d’évaluer le réseau sous sa forme finale, 
+    et de voir comment il arrive à prédire comme si le réseau était intégré à notre application. 
+    C’est pour cela qu’il doit être composé exclusivement de nouveaux échantillons, 
+    encore jamais utilisé pour éviter de biaiser les résultats en lui envoyant des donnés, 
+    qu’il connaîtrait déjà et qu’il aurait déjà appris lors de la phase d’entrainement ou de validation. 
+    Celui-ci encore peut être estimé de l’ordre de 10% des données disponible."""
+
+#Division du dataset en Train_set soit 80% et X_test_validation soit 20%
+#X_train represent les données d'entrainement, X_test_validation represente les
+#données de test plus les données de validation
+Train_set,X_test_validation = train_test_split(panier, test_size=0.2, random_state=42)
+Test_set,Validation_set=train_test_split(X_test_validation, test_size=0.5, random_state=42)
+#Visualisation du dataset d'entrainement
+with st.expander("Visualisation du dataset d'entrainement"):
+    st.write("Taille du dataset d'entrainement:", Train_set.shape)
+    st.write(Train_set)
+
+#Visualisation du dataset de validation
+with st.expander("Visualisation du dataset de validation"):
+    st.write("Taille du dataset de validation:", Validation_set.shape)
+    st.write(Validation_set)
+
+#Visualisation du dataset de test
+with st.expander("Visualisation du dataset de test"):
+    st.write("Taille du dataset de test:", Test_set.shape)
+    st.write(Test_set)
+
+st.title('Implémentation du model')
