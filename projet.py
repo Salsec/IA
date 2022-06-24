@@ -126,7 +126,7 @@ for h in indice.index:
 #Traiment
 #Suppression des ligne contenant des UnitPrice égales à zéro apès traitement
 donnee=donnee.drop(donnee[donnee['UnitPrice'] == 0.0].index)
-
+st.write(donnee[donnee['UnitePrice']==0.0])
 #Verification de la présence des ligne contenant des UnitPrice égales à zéro apès traitement
 with st.expander('Verification de la pésence de valeur abérants dans la colonne Uniteprice apès traitement'):
     st.write('Existe il des données négatives ou égale à zéro dans la colonne UnitPrice apès traitement? ', verify_unitprice(donnee))
@@ -229,3 +229,188 @@ with st.expander("Visualisation du dataset de test"):
     st.write(Test_set)
 
 st.title('Implémentation du model')
+
+#Fonctionnement de l'algorithme FP-Croissance
+with st.expander("Modélisation des règles d'association : algorithme de croissance Fp"):
+    """Fp Growth est un modèle de Data Mining basé sur des règles d'association.
+    Ce modèle permet, à partir d'un historique des transactions, 
+    de déterminer l'ensemble des règles d'association les plus fréquentes dans le jeu de données. 
+    Pour cela, il a besoin comme paramètre d'entrée de l'ensemble des transactions composé des paniers de produits que les clients ont déjà achetés.
+
+    Étant donné un ensemble de données de transactions, 
+    la première étape de la croissance FP consiste à calculer les 
+    fréquences des articles et à identifier les articles fréquents.
+
+    La deuxième étape de la croissance FP utilise une structure d'arborescence de suffixes (FP-tree) pour coder les transactions sans générer explicitement des ensembles candidats, 
+    qui sont généralement coûteux à générer. Après la deuxième étape, 
+    les itemsets fréquents peuvent être extraits de l'arbre FP et le modèle renvoie un ensemble de règles d'association de produits comme dans l'exemple ci-dessous :"""
+    """{Produit A + Produit B} --> {Produit C} avec 60% de probabilité"""
+    """{Produit B + Produit C} --> {Produit A + Produit D} avec une probabilité de 78 %"""
+    """{Prodcut C} --> {Product B + Product D} avec 67% de probabilité"""
+    """Pour établir ce tableau, il faut munir le modèle de 2 hyperparamètres :
+
+
+    minSupRatio : support minimum pour qu'un itemset soit identifié comme fréquent. 
+    Par exemple, si un élément apparaît 3 transactions sur 5, il a un support de 3/5=0,6.
+    minConf :confiance minimale pour générer la règle d'association. 
+    La confiance est une indication de la fréquence à laquelle une règle d'association s'est avérée vraie.
+    Par exemple, si dans l'itemset des transactions X apparaît 4 fois, X et Y ne coexistent que 2 fois, 
+    la confiance pour la règle X => Y est alors 2/4 = 0,5. 
+    Le paramètre n'affectera pas l'exploration des ensembles d'éléments fréquents, 
+    mais spécifiera la confiance minimale pour générer des règles d'association à partir d'ensembles d'éléments fréquents.
+   
+   
+    Une fois les règles d'association calculées, 
+    il ne vous reste plus qu'à les appliquer aux paniers produits des clients."""
+
+#Génération des règles avec les données d'entainement
+
+with st.expander("Règles générées"):
+    freqItemSet, regles = fpgrowth(Train_set['StockCode'].values, minSupRatio=0.005, minConf=0.3)
+    st.write('Nombre de règle générer:',len(regles))
+ 
+
+#Conversion des règles générées en dataframe
+with st.expander("Conversion des règles générées en dataframe"):
+    lien=pd.DataFrame(regles,columns =['panier','prochain_produit','probabilite']) 
+    lien=lien.sort_values(by='probabilite',ascending=False)
+    st.write(lien)
+
+#paramètre : element_panier = liste des éléments du panier du consommateur
+#return : produit_suivant, probability = prochain produit à recommander, probabilité d'achat. 
+# Ou (0,0) si aucun produit n'est trouvé.
+#Description : depuis le panier d'un utilisateur, 
+#renvoie le produit à recommander s'il n'a pas été trouvé
+#dans la liste des associations du tableau associé au modèle FP Growth.
+#Pour cela, nous recherchons dans le tableau des associations le produit à recommander de chaque
+
+def calcul_produit_suivant_proba(element_panier):
+    # pour chaque élément du panier du consommateur
+    for i in element_panier:
+        i={i}
+         # si nous trouvons une association correspondante dans la table de croissance fp
+        if len(lien[lien['panier']==i].values) !=0:
+            # on prend le produit conséquent
+             produit_suivant=list(lien[lien['panier']==i]['prochain_produit'].values[0])[0]
+             # Nous vérifions que le client n'a pas déjà acheté le produit
+             if produit_suivant not in element_panier:
+                # Trouver la probabilité associée.
+                probability=lien[lien['panier']==i]['probabilite'].values[0]
+                return(produit_suivant,probability)
+    #si aucun produit n'a été trouvé.
+    return(0,0)
+
+#Paramètre : panier = dataframe du panier du consommateur
+#Retour : list_prochain_produit, list_probability = liste des prochains éléments à recommander et les probabilités d'achat associées.
+#description : Fonction principale qui utilise celle ci-dessus. 
+#Pour chaque client dans l'ensemble de données, nous recherchons un correspondant
+#association dans le tableau du modèle Fp Growth. 
+#Si aucune association n'est trouvée, nous appelons le compute_next_best_product
+#fonction qui recherche des associations de produits individuels.
+#Si aucune association individuelle n'est trouvée, la fonction renvoie (0,0).
+
+def trouver_prochain_produit(panier):
+    n=panier.shape[0]
+    list_prochain_produit=[]
+    list_probability=[]
+    #pour chaque client
+    for i in range(n):
+        # panier client
+        element=set(panier['StockCode'][i])
+        # si on trouve une association dans le tableau de croissance fp correspondant à tout le panier du client.
+        if len(lien[lien['panier']==element].values) !=0:
+            # On prend le produit conséquent
+            produit_suivant=list(lien[lien['panier']==element]['prochain_produit'].values[0])[0]
+            # Probabilité associée dans le tableau
+            probability=lien[lien['panier']==element]['probabilite'].values[0]
+            list_prochain_produit.append(produit_suivant)
+            list_probability.append(probability)
+        # Si aucun antécédent à tout le panier n'a été trouvé dans le tableau
+        elif len(lien[lien['panier']==element].values) ==0: 
+            # fonction précédente
+             produit_suivant,probability= calcul_produit_suivant_proba(panier['StockCode'][i])
+             list_prochain_produit.append(produit_suivant)
+             list_probability.append(probability)
+    return(list_prochain_produit,list_probability)
+
+#Calcul pour chaque client
+
+# Ensemble de produits recommandés
+list_prochain_produit, list_probability=trouver_prochain_produit(Train_set)
+# Ensemble de probabilités associées
+Train_set['Produits recommandes']=list_prochain_produit 
+Train_set['Probability']=list_probability
+#Visualisation des resultats
+st.write(Train_set)
+
+#### Calcul des prix estimés à partir des recommandations faites 
+# et affichage du tableau final avec l'association (client, produit recommandé)
+
+def prix_proba_liste(panier,data):
+    panier=panier.rename(columns = {'StockCode': 'Panier client'})
+    data_stock=data.drop_duplicates(subset ="StockCode", inplace = False)
+    prix=[]
+    description_list=[]
+    for i in range(panier.shape[0]):
+        stockcode=panier['Produits recommandes'][i]
+        probability= panier['Probability'][i]
+        if stockcode != 0:
+            prix_unitaire=data_stock[data_stock['StockCode']==stockcode]['UnitPrice'].values[0]
+            description=data_stock[data_stock['StockCode']==stockcode]['Description'].values[0]
+            estim_price=prix_unitaire*probability
+            prix.append(estim_price)
+            description_list.append(description)
+        else :
+            prix.append(0)
+            description_list.append('Null')
+    return prix,description_list
+
+Train_set['Prix estime'],Train_set['Product description']=prix_proba_liste(Train_set,donnee) 
+
+Train_set = Train_set.reindex(columns=['Panier client','Produits recommandes','Description Produit','Probability','Price estimation'])
+with st.expander("Vusialisation des résultats d'entrainement"):
+    st.write(Train_set)
+    #Evaluation du model
+    st.write('En moyenne, le système de recommandation peut prédire en',Train_set['Probability'].mean()*100,  '%' 'du prochain produit que le client achètera' )
+
+#validation#######################################################################
+freqItemSet, regles = fpgrowth(Validation_set['StockCode'].values, minSupRatio=0.005, minConf=0.3)
+lien=pd.DataFrame(regles,columns =['panier','prochain_produit','probabilite']) 
+lien=lien.sort_values(by='probabilite',ascending=False)
+#Calcul pour chaque client
+
+# Ensemble de produits recommandés
+list_prochain_produit1, list_probability1=trouver_prochain_produit(Validation_set)
+# Ensemble de probabilités associées
+Validation_set['Produits recommandes']=list_prochain_produit 
+Validation_set['Probability']=list_probability
+#Visualisation des resultats
+#st.write(Validation_set)
+Validation_set['Prix estime'],Validation_set['Product description']=prix_proba_liste(Validation_set,donnee) 
+
+Validation_set = Validation_set.reindex(columns=['Panier client','Produits recommandes','Description Produit','Probability','Price estimation'])
+with st.expander("Vusialisation des résultats de validation"):
+    st.write(Validation_set)
+    #Evaluation du model
+    st.write('En moyenne, le système de recommandation peut prédire en',Validation_set['Probability'].mean()*100,  '%')
+
+#Test #######################################################################
+freqItemSet, regles = fpgrowth(Test_set['StockCode'].values, minSupRatio=0.005, minConf=0.3)
+lien=pd.DataFrame(regles,columns =['panier','prochain_produit','probabilite']) 
+lien=lien.sort_values(by='probabilite',ascending=False)
+#Calcul pour chaque client
+
+# Ensemble de produits recommandés
+list_prochain_produit1, list_probability1=trouver_prochain_produit(Test_set)
+# Ensemble de probabilités associées
+Test_set['Produits recommandes']=list_prochain_produit 
+Test_set['Probability']=list_probability
+#Visualisation des resultats
+#st.write(Validation_set)
+Test_set['Prix estime'],Test_set['Product description']=prix_proba_liste(Test_set,donnee) 
+
+Test_set = Test_set.reindex(columns=['Panier client','Produits recommandes','Description Produit','Probability','Price estimation'])
+with st.expander("Vusialisation des résultats de validation"):
+    st.write(Test_set)
+    #Evaluation du model
+    st.write('En moyenne, le système de recommandation peut prédire en',Test_set['Probability'].mean()*100,  '%')
