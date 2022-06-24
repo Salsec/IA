@@ -2,12 +2,9 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as s
 import pandas_profiling
 from streamlit_pandas_profiling import st_profile_report
-from sklearn.model_selection import train_test_split
-from fpgrowth_py import fpgrowth
+
 
 
 st.title('SYSTEME DE RECOMMANDATION')
@@ -180,5 +177,13 @@ with st.expander("Rapport de donnée du dataset après traitement"):
     st_profile_report(profil)
 
 #Regroupement tous les produits qu'un client a achetés ensemble.
-panier = donnee.groupby(['InvoiceNo','CustomerID']).agg({'StockCode': lambda s: list(s), 'Quantity': lambda i: list(i)})
-st.write(panier)
+#Chaque ligne correspond à une transaction composée du numéro de facture, de l'identifiant client et de tous les produits achetés.
+panier = donnee.groupby(['InvoiceNo','CustomerID']).agg({'StockCode': lambda s: list(set(s))})
+with st.expander('Reorganisation et normalisation du dataset'):
+    st.write(panier.shape)
+    st.write(panier)
+
+# generation du rapport de donnée du dataset après reorganisation
+with st.expander("Rapport de donnée du dataset après reorganisation"):
+    profil=pandas_profiling.ProfileReport(panier, title="Rapport de dataset après reorganisation")
+    st_profile_report(profil)
